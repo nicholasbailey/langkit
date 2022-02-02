@@ -15,10 +15,11 @@ type Engine interface {
 }
 
 type Interpreter interface {
-	Evaluate(tree *Token, variableValues VariableValues) (Value, Exception)
+	Execute(statements []*Token) (Value, Exception)
+	EvaluateWithValues(tree *Token, variableValues VariableValues) (Value, Exception)
 }
 
-func NewEngine(symbolTable SymbolTable, intepreter Interpreter) Engine {
+func NewEngine(symbolTable LanguageSpecification, intepreter Interpreter) Engine {
 	lexerFactory := func(source io.Reader) Lexer {
 		return NewLexer(source, symbolTable)
 	}
@@ -38,8 +39,12 @@ func (engine *EngineImpl) ExecuteWithGlobals(source io.Reader, globals VariableV
 	parser := TDOPParser{
 		Lexer: lexer,
 	}
-	tree := parser.Expression(0)
-	return engine.interpreter.Evaluate(tree, globals)
+
+	trees, err := parser.Statements()
+	if err != nil {
+		return nil, err
+	}
+	return engine.interpreter.Execute(trees)
 }
 
 func (engine *EngineImpl) Execute(source io.Reader) (Value, Exception) {
@@ -69,9 +74,9 @@ type InterpreterImpl struct {
 	Functions BuiltinsRegistry
 }
 
-func (interpreter *InterpreterImpl) Evaluate(tree *Token, variableValues VariableValues) (Value, Exception) {
+func (interpreter *InterpreterImpl) EvaluateWithValues(tree *Token, variableValues VariableValues) (Value, Exception) {
 	if len(tree.Children) == 0 {
-		if tree.Symbol == NameSymbol {
+		if tree.Symbol == Name {
 			val, found := variableValues[tree.Value]
 			if !found {
 				return nil, errors.New(fmt.Sprintf("Unbound variable %v at line %v, col %v", tree.Value, tree.Line, tree.Col))
@@ -93,7 +98,7 @@ func (interpreter *InterpreterImpl) Evaluate(tree *Token, variableValues Variabl
 	}
 	childValues := []interface{}{}
 	for _, subTree := range tree.Children {
-		value, err := interpreter.Evaluate(subTree, variableValues)
+		value, err := interpreter.EvaluateWithValues(subTree, variableValues)
 		if err != nil {
 			return nil, err
 		}

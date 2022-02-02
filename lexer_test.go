@@ -7,45 +7,18 @@ import (
 )
 
 func makeLexer(sourceCode string) *TDOPLexer {
-	symbolTable := NewSymbolTable()
+	symbolTable := NewLanguage()
 	symbolTable.DefineInfix("AND", 20)
 	symbolTable.DefineInfix("OR", 10)
 	symbolTable.DefinePrefix("NOT", 40)
 	symbolTable.DefineInfix("=", 30)
 	symbolTable.DefineInfix("!=", 30)
 	symbolTable.DefineParens("(", ")")
+	symbolTable.DefineQuotes('"', '"', StringLiteral)
 	return NewLexer(strings.NewReader(sourceCode), symbolTable)
 }
 
-func areTokensEquivalent(x *Token, y *Token) (bool, string) {
-	if len(x.Children) != len(y.Children) {
-		return false, "Children of unequal length"
-	}
-	for i, xChild := range x.Children {
-		areEquivalent, message := areTokensEquivalent(xChild, y.Children[i])
-		if !areEquivalent {
-			return false, fmt.Sprintf("Children at position %v were unequal with message %v", i, message)
-		}
-	}
-	if x.Arity != y.Arity {
-		return false, fmt.Sprintf("Arity %v != %v", x.Arity, y.Arity)
-	}
-	if x.BindingPower != y.BindingPower {
-		return false, fmt.Sprintf("BindingPower %v != %v", x.BindingPower, y.BindingPower)
-	}
-	if x.Line != y.Line {
-		return false, fmt.Sprintf("Line %v != %v", x.Line, y.Line)
-	}
-	if x.Symbol != y.Symbol {
-		return false, fmt.Sprintf("Symbol %v != %v", x.Symbol, y.Symbol)
-	}
-	if x.Value != y.Value {
-		return false, fmt.Sprintf("Value %v != %v", x.Value, y.Value)
-	}
-	return true, ""
-}
-
-func TestTDOPLexerNext(t *testing.T) {
+func TestLexer(t *testing.T) {
 	type testCase struct {
 		input    string
 		expected []*Token
@@ -497,9 +470,12 @@ func TestTDOPLexerNext(t *testing.T) {
 			tokens := []*Token{}
 			loops := 0
 			for {
-				token := lexer.Next()
+				token, err := lexer.Next()
+				if err != nil {
+					t.Fatalf("Unexpected parsing error %v", err)
+				}
 				tokens = append(tokens, token)
-				if token.Symbol == EOFSymbol || loops > 100 {
+				if token.Symbol == EOF || loops > 100 {
 					break
 				}
 				loops++
@@ -508,241 +484,37 @@ func TestTDOPLexerNext(t *testing.T) {
 				expectedTok := testCase.expected[i]
 				equivalent, message := areTokensEquivalent(expectedTok, tok)
 				if !equivalent {
-					t.Fatal(message)
+					t.Fatal(fmt.Sprintf("Expected %v got %v, ", expectedTok, tok) + message)
 				}
 			}
 		})
 	}
 }
 
-func TestParse(t *testing.T) {
-	type testCase struct {
-		input  string
-		output *Token
+func areTokensEquivalent(x *Token, y *Token) (bool, string) {
+	if len(x.Children) != len(y.Children) {
+		return false, "Children of unequal length"
 	}
-
-	cases := []testCase{
-		testCase{
-			input: "A",
-			output: &Token{
-				Symbol:       "(NAME)",
-				Value:        "A",
-				Line:         1,
-				Col:          1,
-				Arity:        0,
-				BindingPower: 0,
-				Children:     []*Token{},
-			},
-		},
-		testCase{
-			input: "Name = \"Hello\"",
-			output: &Token{
-				Symbol:       "=",
-				Value:        "=",
-				Line:         1,
-				Col:          1,
-				Arity:        2,
-				BindingPower: 30,
-				Children: []*Token{
-					&Token{
-						Symbol:       "(NAME)",
-						Value:        "Name",
-						Line:         1,
-						Arity:        0,
-						BindingPower: 0,
-						Children:     []*Token{},
-					},
-					&Token{
-						Symbol:       "(STRING)",
-						Value:        "Hello",
-						Line:         1,
-						Arity:        0,
-						BindingPower: 0,
-						Children:     []*Token{},
-					},
-				},
-			},
-		},
-		testCase{
-			input: "A = C AND B = D",
-			output: &Token{
-				Symbol:       "AND",
-				Value:        "AND",
-				Line:         1,
-				Arity:        2,
-				BindingPower: 20,
-				Children: []*Token{
-					&Token{
-						Symbol:       "=",
-						Value:        "=",
-						Line:         1,
-						Arity:        2,
-						BindingPower: 30,
-						Children: []*Token{
-							&Token{
-								Symbol:       "(NAME)",
-								Value:        "A",
-								Line:         1,
-								Arity:        0,
-								BindingPower: 0,
-								Children:     []*Token{},
-							},
-							&Token{
-								Symbol:       "(NAME)",
-								Value:        "C",
-								Line:         1,
-								Arity:        0,
-								BindingPower: 0,
-								Children:     []*Token{},
-							},
-						},
-					},
-					&Token{
-						Symbol:       "=",
-						Value:        "=",
-						Line:         1,
-						Arity:        2,
-						BindingPower: 30,
-						Children: []*Token{
-							&Token{
-								Symbol:       "(NAME)",
-								Value:        "B",
-								Line:         1,
-								Arity:        0,
-								BindingPower: 0,
-								Children:     []*Token{},
-							},
-							&Token{
-								Symbol:       "(NAME)",
-								Value:        "D",
-								Line:         1,
-								Arity:        0,
-								BindingPower: 0,
-								Children:     []*Token{},
-							},
-						},
-					},
-				},
-			},
-		},
-		testCase{
-			input: "A AND B",
-			output: &Token{
-				Symbol:       "AND",
-				Value:        "AND",
-				Line:         1,
-				Arity:        2,
-				BindingPower: 20,
-				Children: []*Token{
-					&Token{
-						Symbol:       "(NAME)",
-						Value:        "A",
-						Line:         1,
-						Arity:        0,
-						BindingPower: 0,
-						Children:     []*Token{},
-					},
-					&Token{
-						Symbol:       "(NAME)",
-						Value:        "B",
-						Line:         1,
-						Arity:        0,
-						BindingPower: 0,
-						Children:     []*Token{},
-					},
-				},
-			},
-		},
-		testCase{
-			input: "(A AND B)",
-			output: &Token{
-				Symbol:       "AND",
-				Value:        "AND",
-				Line:         1,
-				Arity:        2,
-				BindingPower: 20,
-				Children: []*Token{
-					&Token{
-						Symbol:       "(NAME)",
-						Value:        "A",
-						Line:         1,
-						Arity:        0,
-						BindingPower: 0,
-						Children:     []*Token{},
-					},
-					&Token{
-						Symbol:       "(NAME)",
-						Value:        "B",
-						Line:         1,
-						Arity:        0,
-						BindingPower: 0,
-						Children:     []*Token{},
-					},
-				},
-			},
-		},
-		testCase{
-			input: "(A AND (B OR C))",
-			output: &Token{
-				Symbol:       "AND",
-				Value:        "AND",
-				Line:         1,
-				Arity:        2,
-				BindingPower: 20,
-				Children: []*Token{
-					&Token{
-						Symbol:       "(NAME)",
-						Value:        "A",
-						Line:         1,
-						Arity:        0,
-						BindingPower: 0,
-						Children:     []*Token{},
-					},
-					&Token{
-						Symbol:       "OR",
-						Value:        "OR",
-						Line:         1,
-						Arity:        2,
-						BindingPower: 10,
-						Children: []*Token{
-							&Token{
-								Symbol:       "(NAME)",
-								Value:        "B",
-								Line:         1,
-								Arity:        0,
-								BindingPower: 0,
-								Children:     []*Token{},
-							},
-							&Token{
-								Symbol:       "(NAME)",
-								Value:        "C",
-								Line:         1,
-								Arity:        0,
-								BindingPower: 0,
-								Children:     []*Token{},
-							},
-						},
-					},
-				},
-			},
-		},
+	for i, xChild := range x.Children {
+		areEquivalent, message := areTokensEquivalent(xChild, y.Children[i])
+		if !areEquivalent {
+			return false, fmt.Sprintf("Children at position %v were unequal with message %v", i, message)
+		}
 	}
-	for _, c := range cases {
-		t.Run(c.input, func(t *testing.T) {
-			lexer := makeLexer(c.input)
-			parser := TDOPParser{
-				Lexer: lexer,
-			}
-			tree := parser.Expression(0)
-			equivalent, message := areTokensEquivalent(c.output, tree)
-			if !equivalent {
-				fmt.Println("Expected")
-				fmt.Println(c.output.TreeString(0))
-				fmt.Println(tree.TreeString(0))
-				fmt.Println("Actual")
-				t.Fatal(message)
-			}
-		})
-
+	if x.Arity != y.Arity {
+		return false, fmt.Sprintf("Arity %v != %v", x.Arity, y.Arity)
 	}
+	if x.BindingPower != y.BindingPower {
+		return false, fmt.Sprintf("BindingPower %v != %v", x.BindingPower, y.BindingPower)
+	}
+	if x.Line != y.Line {
+		return false, fmt.Sprintf("Line %v != %v", x.Line, y.Line)
+	}
+	if x.Symbol != y.Symbol {
+		return false, fmt.Sprintf("Symbol %v != %v", x.Symbol, y.Symbol)
+	}
+	if x.Value != y.Value {
+		return false, fmt.Sprintf("Value %v != %v", x.Value, y.Value)
+	}
+	return true, ""
 }
