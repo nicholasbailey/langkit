@@ -15,6 +15,10 @@ const (
 	IntLiteral         Symbol = "(INT)"
 	FloatLiteral       Symbol = "(FLOAT)"
 	FunctionInvocation Symbol = "(FUNCTIONINVOCATION)"
+	Block              Symbol = "(BLOCK)"
+	ElseIf             Symbol = "(ELSEIF)"
+	FunctionDefinition Symbol = "(FUNCTIONDEFINITION)"
+	FunctionParameters Symbol = "(FUNCTIONPARAMETERS)"
 )
 
 type NudFunction func(right *Token, parser *TDOPParser) (*Token, error)

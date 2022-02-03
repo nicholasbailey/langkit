@@ -48,6 +48,9 @@ type Lexer interface {
 	Next() (*Token, error)
 	Peek() (*Token, error)
 	IsStatementTerminator(token *Token) bool
+	IsBlockStart(token *Token) bool
+	IsAnyBlockEnd(token *Token) bool
+	IsBlockEnd(token *Token, blockStart *Token) bool
 }
 
 func NewLexer(reader io.Reader, symbolTable LanguageSpecification) *TDOPLexer {
@@ -70,6 +73,17 @@ type TDOPLexer struct {
 	currentState      LexerState
 	tokenStartCol     int
 	currentQuoteStart rune
+}
+
+func (lexer *TDOPLexer) IsBlockStart(token *Token) bool {
+	return lexer.languageSpec.IsBlockStart(token.Symbol)
+}
+
+func (lexer *TDOPLexer) IsBlockEnd(token *Token, blockStart *Token) bool {
+	return lexer.languageSpec.IsBlockEnd(token.Symbol, blockStart.Symbol)
+}
+func (lexer *TDOPLexer) IsAnyBlockEnd(token *Token) bool {
+	return lexer.languageSpec.IsAnyBlockEnd(token.Symbol)
 }
 
 func (lexer *TDOPLexer) IsStatementTerminator(token *Token) bool {
@@ -267,6 +281,7 @@ func (lexer *TDOPLexer) Next() (*Token, error) {
 		}
 
 		if token != nil {
+			fmt.Printf("Returning token %v\n", token.Symbol)
 			return token, nil
 		}
 		char, size, err = lexer.readRune()
@@ -292,7 +307,7 @@ func (lexer *TDOPLexer) Next() (*Token, error) {
 			}
 		}
 	}
-	return nil, fmt.Errorf("syntaxerror: unreadable character %v at line %v, col %v", char, lexer.line, lexer.col)
+	return nil, fmt.Errorf("syntaxerror: unreadable character %v at line %v, col %v", string(char), lexer.line, lexer.col)
 }
 
 // func (lexer *TDOPLexer) Next() (*Token, error) {

@@ -20,7 +20,7 @@ func TestToyscriptLexer(t *testing.T) {
 }
 
 func TestToyscriptParser(t *testing.T) {
-	f, _ := os.Open("./test_scripts/test_simple.toy")
+	f, _ := os.Open("../../test_scripts/test_fizzbuzz.toy")
 	spec := BuildToyscriptLanguageSpec()
 	lexer := langkit.NewLexer(f, spec)
 	parser := langkit.NewParser(lexer)

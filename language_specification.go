@@ -1,6 +1,7 @@
 package langkit
 
 import (
+	"fmt"
 	"unicode"
 )
 
@@ -28,14 +29,21 @@ type LanguageSpecification interface {
 	DefineStatementTerminator(symbol Symbol)
 	IsStatementTerminator(symbol Symbol) bool
 	DefineEmpty(symbol Symbol)
+	DefineBlock(startSymbol Symbol, endSymbol Symbol)
+	IsBlockStart(symbol Symbol) bool
+	IsBlockEnd(symbol Symbol, startSymbol Symbol) bool
+	DefineStatment(symbol Symbol, std StdFunction)
+	IsAnyBlockEnd(symbol Symbol) bool
 }
 
 func NewLanguage() LanguageSpecification {
 	symbols := make(map[Symbol]*Token)
 	quotes := make(map[rune]*quoteSpecification)
 	language := &languageSpecificationImpl{
-		quoteDefinitions: quotes,
-		symbols:          symbols,
+		quoteDefinitions:     quotes,
+		symbols:              symbols,
+		statementTerminators: []Symbol{},
+		blockDelimiters:      map[Symbol]Symbol{},
 	}
 	language.DefineValue(Name)
 	language.DefineValue(IntLiteral)
@@ -53,6 +61,49 @@ type languageSpecificationImpl struct {
 	quoteDefinitions     map[rune]*quoteSpecification
 	symbols              map[Symbol]*Token
 	statementTerminators []Symbol
+	blockDelimiters      map[Symbol]Symbol
+}
+
+func (spec *languageSpecificationImpl) IsAnyBlockEnd(symbol Symbol) bool {
+	for _, v := range spec.blockDelimiters {
+		if v == symbol {
+			return true
+		}
+	}
+	return false
+}
+
+func (spec *languageSpecificationImpl) DefineBlock(startSymbol Symbol, endSymbol Symbol) {
+	spec.DefineEmpty(endSymbol)
+
+	std := func(token *Token, parser *TDOPParser) (*Token, error) {
+		statements, err := parser.Statements()
+		if err != nil {
+			fmt.Printf("Error! %v\n", err)
+			return nil, err
+		}
+		token.Children = append(token.Children, statements...)
+		token.Symbol = Block
+		return token, nil
+	}
+
+	spec.DefineStatment(startSymbol, std)
+	spec.blockDelimiters[startSymbol] = endSymbol
+	spec.statementTerminators = append(spec.statementTerminators, endSymbol)
+}
+
+func (spec *languageSpecificationImpl) IsBlockStart(symbol Symbol) bool {
+	if _, found := spec.blockDelimiters[symbol]; found {
+		return true
+	}
+	return false
+}
+func (spec *languageSpecificationImpl) IsBlockEnd(symbol Symbol, startSymbol Symbol) bool {
+	end, found := spec.blockDelimiters[startSymbol]
+	if !found {
+		return false
+	}
+	return symbol == end
 }
 
 func (spec *languageSpecificationImpl) DefineEmpty(symbol Symbol) {
@@ -148,6 +199,7 @@ func (spec *languageSpecificationImpl) GenerateToken(symbol Symbol, value string
 		BindingPower: tok.BindingPower,
 		Nud:          tok.Nud,
 		Led:          tok.Led,
+		Std:          tok.Std,
 		Children:     []*Token{},
 		Col:          col,
 		Line:         line,
@@ -220,4 +272,8 @@ func (spec *languageSpecificationImpl) DefineParens(openParens Symbol, closePare
 	}
 	spec.Define(openParens, 0, 0, nud, nil, nil)
 	spec.DefineValue(closeParens)
+}
+
+func (spec *languageSpecificationImpl) DefineStatment(symbol Symbol, std StdFunction) {
+	spec.Define(symbol, 0, 0, nil, nil, std)
 }

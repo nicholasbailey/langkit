@@ -14,6 +14,23 @@ type TDOPParser struct {
 	Lexer Lexer
 }
 
+func (parser *TDOPParser) Block() (*Token, error) {
+	token, err := parser.Lexer.Next()
+	if err != nil {
+		return nil, err
+	}
+	if !parser.Lexer.IsBlockStart(token) {
+		return nil, fmt.Errorf("syntaxerror: expected block start, but got %v at line %v, col %v", token.Value, token.Line, token.Col)
+	}
+
+	block, err := token.Std(token, parser)
+	if err != nil {
+		return nil, err
+	}
+	parser.Lexer.Next()
+	return block, nil
+}
+
 func (parser *TDOPParser) Statement() (*Token, error) {
 	tok, err := parser.Lexer.Peek()
 	if err != nil {
@@ -31,9 +48,10 @@ func (parser *TDOPParser) Statement() (*Token, error) {
 		return nil, err
 	}
 	terminator, err := parser.Lexer.Next()
+	// TODO - unpanic this
 	if !parser.Lexer.IsStatementTerminator(terminator) {
 
-		return nil, fmt.Errorf("syntaxerror: unterminated statement with %v at line %v, col %v", terminator.Value, terminator.Line, terminator.Col)
+		panic(fmt.Errorf("syntaxerror: unterminated statement with %v at line %v, col %v", terminator.Value, terminator.Line, terminator.Col))
 	}
 	if err != nil {
 		return nil, err
@@ -48,7 +66,7 @@ func (parser *TDOPParser) Statements() ([]*Token, error) {
 	if err != nil {
 		return nil, err
 	}
-	for next.Symbol != EOF {
+	for next.Symbol != EOF && !parser.Lexer.IsAnyBlockEnd(next) {
 		statement, err := parser.Statement()
 		if err != nil {
 			return nil, err
